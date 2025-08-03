@@ -18,7 +18,6 @@ export async function run(provider: NetworkProvider) {
         return 0;
     }
 
-    console.log("Bit string:", walletCode.bits.substring(0, 8).toString());
     const isLibrary = walletCode.isExotic && walletCode.bits.length == 256 + 8 && walletCode.bits.substring(0, 8).toString() == '02';
 
     if(isLibrary) {
