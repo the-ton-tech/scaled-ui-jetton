@@ -89,9 +89,11 @@ As mentioned in main [README](https://github.com/ton-blockchain/stablecoin-contr
 If any changes made to the current wallet code, deploying additional libraries can be costly.
 Therefore some developers might consider re-working the code to use regular code cell instead.
 
+Note that storage and transfer costs in this case will **increase significantly**.
+
 #### Diff example
 
-When testing cycle applied, the resulting diff would look like this:
+When testing cycle applied, the resulting diff might look like this:
 
 ``` diff
 diff --git a/contracts/gas.fc b/contracts/gas.fc
@@ -217,6 +219,3 @@ index f514427..7e04f57 100644
              op: Op.internal_transfer,
 
 ```
-
-After diff applied, developer should be able to run the current code safely without deploying the library.
-Note that storage and transfer costs in this case increase significantly.
