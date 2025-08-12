@@ -87,7 +87,7 @@ to process any further transactions.
 Therefore, it is the developer responsibility to deploy the library for
 a reasonable time period and monitor it's expiration date.
 
-To extend the library storage, simple repeat the library deployment procedure.
+To extend the library storage, top-up the previous librarian address or repeat the library deployment procedure.
 
 ### Deploying Minter with library wallet code
 
@@ -109,6 +109,14 @@ using `@ton/ton` or Fift language.
 Use the provided examples to adapt it to the environment of choice.
 
 ### Check deployment validity
+
+In order to determine if library has been deployed successfully:
+
+1. Find your librarian contract address in the explorer of choice
+2. Check that account status is active and balance is positive. If deployment failed, contract should return all incoming value to the sender
+3. Check that account code and data are set empty cell `x{}` or `96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7` in hash view
+4. Take your **RAW** code hash, and pass it in upper case to [get_lib](https://dton.io/graphql/#query=%7B%0A%20%20get_lib(lib_hash%3A%20%228F452D7A4DFD74066B682365177259ED05734435BE76B5FD4BD5D8AF2B7C3D68%22)%0A%7D)
+5. `get_lib` result should be non-empty
 
 > ⚠️ **Important notice**
 Before performing any token mint, it is highly recommended

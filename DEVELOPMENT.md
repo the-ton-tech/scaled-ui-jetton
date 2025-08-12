@@ -219,3 +219,71 @@ index f514427..7e04f57 100644
              op: Op.internal_transfer,
 
 ```
+
+## TON Libraries FAQ
+
+### What are the libraries?
+
+Refer to the [library cells documentation](https://docs.ton.org/v3/documentation/data-formats/tlb/library-cells)
+
+### What are the benefits of using the library?
+
+Using a library allows developers to access the contents of a data Cell through
+its library cell.
+If the data Cell content exceeds the size of the library cell
+(8-bit cell type and 256-bit hash),
+transferring or storing such data in the form of a library cell
+will be more cost-effective.
+
+For an example, see [this link](https://docs.ton.org/v3/documentation/data-formats/tlb/library-cells#using-library-cells-in-smart-contracts).
+
+### How library is deployed?
+
+Any contract can deploy a library using the `set_lib_code` [action](https://docs.ton.org/v3/documentation/data-formats/tlb/library-cells#publish-ordinary-cell-in-masterchain-library-context)
+
+If action successful, library is added to the account [state](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L151),
+and then if account resides in the masterchain, all of the masterchain accounts libraries are [merged](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/validator/impl/collator.cpp#L5447-L5458) into the global library [collection](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L427).
+
+The caller account in this case becomes the *Publisher account* in terms of [library description](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L435-L436).
+
+### How to pay for library storage
+
+When a library is published, it is still part of the account state,
+so the number of it's cells and bits is added to the publishers account storage stats.
+This means that publisher account takes library storage expenses as it's own.
+
+### How to remove the library from the network
+
+- Publisher account may call `set_lib_code` action with flag 0, removing itself from publishers
+- Publisher account may ran out of funds on balance, become frozen so it's code/data and libraries will be removed
+
+### What if someone else tries to remove the library
+
+Every library description stores a [dictionary](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L435-L436) of publishers account addresses.
+Library will be removed from the network only if there is [no more](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/validator/impl/collator.cpp#L5427-L5432) publishers left.
+
+`set_lib_code` action may only remove the calling address from publishers dictionary if present.
+So, no else account can remove library published by other account.
+
+### What are the limitations of library cells
+
+#### Publishers origin
+
+Only contracts residing in the masterchain can make a library public.
+
+Check is implemented in the [collator](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/validator/impl/collator.cpp#L5532).
+It ensures that only the masterchain collator is going to perform public library
+update, meaning that public libraries from basechain accounts will be ignored.
+
+#### Library count per account
+
+A single masterchain account may currently contain up to [256](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/mc-config.h#L402) libraries.
+
+This check is implemented as [follows](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/transaction.cpp#L3225-L3226)
+
+#### Data cell size
+
+A library data cell may currently have up to 1000 child cells, according to [SizeLimitsConfig](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/mc-config.h#L397) and [following](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/transaction.cpp#L2319) check.
+
+Keep in mind that account holds library dictionary, so account cells + bits including all of it's published
+libraries should fit under general [account limits](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/mc-config.h#L400-L401)
