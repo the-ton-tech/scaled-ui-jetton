@@ -230,10 +230,15 @@ Refer to the [library cells documentation](https://docs.ton.org/v3/documentation
 
 Using a library allows developers to access the contents of a data Cell through
 its library cell.
-If the data Cell content exceeds the size of the library cell
-(8-bit cell type and 256-bit hash),
-transferring or storing such data in the form of a library cell
-will be more cost-effective.
+
+If data is stored in contract state directly,
+all the associated fees such as forward(during deployment) and storage
+are paid individually on contract bases.
+
+In case data is stored in a public library, it's contents
+can be accessed by library cell,
+which only contains (8-bit cell type and 256-bit data hash).
+Therefore, storing and transferring data will be more cost-effective
 
 For an example, see [this link](https://docs.ton.org/v3/documentation/data-formats/tlb/library-cells#using-library-cells-in-smart-contracts).
 
@@ -244,7 +249,7 @@ Any contract can deploy a library using the `set_lib_code` [action](https://docs
 If action successful, library is added to the account [state](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L151),
 and then if account resides in the masterchain, all of the masterchain accounts libraries are [merged](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/validator/impl/collator.cpp#L5447-L5458) into the global library [collection](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L427).
 
-The caller account in this case becomes the *Publisher account* in terms of [library description](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L435-L436).
+The caller account in this case, becomes the *Publisher account* in terms of [library description](https://github.com/ton-blockchain/ton/blob/cac968f77dfa5a14e63db40190bda549f0eaf746/crypto/block/block.tlb#L435-L436).
 
 ### How to pay for library storage
 
@@ -255,7 +260,12 @@ This means that publisher account takes library storage expenses as it's own.
 ### How to remove the library from the network
 
 - Publisher account may call `set_lib_code` action with flag 0, removing itself from publishers
-- Publisher account may ran out of funds on balance, become frozen so it's code/data and libraries will be removed
+- Publisher account may send message in mode [32](https://docs.ton.org/v3/documentation/smart-contracts/message-management/message-modes-cookbook/#mode160), destroying its state.
+- Publisher account may ran out of funds on balance, become frozen so it's code/data and libraries will be removed.
+
+Common measure to ensure that the only removal reason possible would be
+running out of funds, is to null account code and data right after
+a successful library deployment.
 
 ### What if someone else tries to remove the library
 
