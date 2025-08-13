@@ -21,7 +21,7 @@ export async function run(provider: NetworkProvider) {
             const codeCell = Cell.fromBoc(stateBefore.state.code)[0];
             const dataCell = Cell.fromBoc(stateBefore.state.data)[0];
             if(codeCell.equals(emptyCell) && dataCell.equals(emptyCell)) {
-                console.log("Library is already deployed, contract is bricked.");
+                ui.write("Library is already deployed, contract is bricked.");
                 return -1;
             }
         }
@@ -29,7 +29,8 @@ export async function run(provider: NetworkProvider) {
 
     await librarian.sendDeploy(provider.sender(), tonAmount);
 
-    console.log("Waiting for the library to deploy...");
+    ui.write(`Librarian at: ${librarian.address.toString()}`);
+    ui.write("Waiting for the library to deploy...");
 
     let retryCount = 60;
 
@@ -43,10 +44,10 @@ export async function run(provider: NetworkProvider) {
             const dataCell = Cell.fromBoc(curState.state.data!)[0];
 
             if(codeCell.equals(emptyCell) && dataCell.equals(emptyCell)) {
-                console.log("Library deployed successfully!");
+                ui.write("Library deployed successfully!");
                 return 0;
             } else {
-                console.error("Funds were not accepted, check that amount is enough to cover the storage period in full");
+                ui.write("Funds were not accepted, check that amount is enough to cover the storage period in full");
                 return -1;
             }
         }
