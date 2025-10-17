@@ -8,7 +8,7 @@
 #include "jetton-utils.fc";
 #include "gas.fc";
 
-;; storage#_ total_supply:Coins admin_address:MsgAddress next_admin_address:MsgAddress jetton_wallet_code:^Cell metadata_uri:^Cell displayed_supply:Coins
+;; storage#_ total_supply:Coins admin_address:MsgAddress next_admin_address:MsgAddress jetton_wallet_code:^Cell metadata_uri:^Cell
 ;;  ^[scaled_ui_numerator:(VarUInteger 32) scaled_ui_denominator:(VarUInteger 32)
 ;;    scheduled_change:(Maybe ^[scheduled_after:uint64 new_numerator:(VarUInteger 32) new_denominator:(VarUInteger 32) comment:(Maybe ^Cell)])] = Storage;
 (int, slice, slice, cell, cell, cell) load_data() inline {
