@@ -16,6 +16,12 @@ export abstract class Op {
     static top_up = 0xd372158c;
     static change_metadata_url = 0xcb862902;
     static set_status = 0xeed236d3;
+
+    static set_scaled_ui_data = 0xc3eecacf;
+    static schedule_scaled_ui_change = 0xf9980104;
+    static enact_scheduled_scaled_ui_change = 0x452c0574;
+
+    static display_multiplier_changed = 0xac392598;
 }
 
 export abstract class Errors {
@@ -30,6 +36,8 @@ export abstract class Errors {
     static not_enough_gas = 48;
     static invalid_mesage = 49;
     static discovery_fee_not_matched = 75;
+
+    static zero_multiplier = 99;
+    static no_scheduled_change = 98;
+    static scheduled_change_not_ready = 97;
 }
-
-

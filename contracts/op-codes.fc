@@ -26,6 +26,15 @@ const op::claim_admin = 0xfb88e119;
 const op::upgrade = 0x2508d66a;
 const op::call_to = 0x235caf52;
 const op::change_metadata_uri = 0xcb862902;
+const op::set_scaled_ui_data = 0xc3eecacf;
+const op::schedule_scaled_ui_change = 0xf9980104;
+const op::enact_scheduled_scaled_ui_change = 0x452c0574;
+
+const event::display_multiplier_changed = 0xac392598;
+
+const error::zero_multiplier = 99;
+const error::no_scheduled_change = 98;
+const error::scheduled_change_not_ready = 97;
 
 ;; jetton-wallet
 

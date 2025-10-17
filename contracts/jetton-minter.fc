@@ -8,21 +8,24 @@
 #include "jetton-utils.fc";
 #include "gas.fc";
 
-;; storage#_ total_supply:Coins admin_address:MsgAddress next_admin_address:MsgAddress jetton_wallet_code:^Cell metadata_uri:^Cell = Storage;
-(int, slice, slice, cell, cell) load_data() inline {
+;; storage#_ total_supply:Coins admin_address:MsgAddress next_admin_address:MsgAddress jetton_wallet_code:^Cell metadata_uri:^Cell displayed_supply:Coins
+;;  ^[scaled_ui_numerator:(VarUInteger 32) scaled_ui_denominator:(VarUInteger 32)
+;;    scheduled_change:(Maybe ^[scheduled_after:uint64 new_numerator:(VarUInteger 32) new_denominator:(VarUInteger 32) comment:(Maybe ^Cell)])] = Storage;
+(int, slice, slice, cell, cell, cell) load_data() inline {
     slice ds = get_data().begin_parse();
     var data = (
         ds~load_coins(), ;; total_supply
         ds~load_msg_addr(), ;; admin_address
         ds~load_msg_addr(), ;; next_admin_address
         ds~load_ref(),  ;; jetton_wallet_code
-        ds~load_ref()  ;; metadata url (contains snake slice without 0x0 prefix)
+        ds~load_ref(),  ;; metadata url (contains snake slice without 0x0 prefix)
+        ds~load_ref()   ;; scaled_ui_data
     );
     ds.end_parse();
     return data;
 }
 
-() save_data(int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) impure inline {
+() save_data(int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) impure inline {
     set_data(
         begin_cell()
         .store_coins(total_supply)
@@ -30,8 +33,45 @@
         .store_slice(next_admin_address)
         .store_ref(jetton_wallet_code)
         .store_ref(metadata_uri)
+        .store_ref(scaled_ui_data)
         .end_cell()
     );
+}
+
+(int, int, cell) unpack_scaled_ui_data(cell scaled_ui_data) inline {
+    slice cs = scaled_ui_data.begin_parse();
+    int numerator = cs~load_varuint32();
+    int denominator = cs~load_varuint32();
+    cell scheduled_change = cs~load_maybe_ref();
+    cs.end_parse();
+    return (numerator, denominator, scheduled_change);
+}
+
+cell pack_scaled_ui_data(int numerator, int denominator, cell scheduled_change) inline {
+    return begin_cell()
+        .store_varuint32(numerator)
+        .store_varuint32(denominator)
+        .store_maybe_ref(scheduled_change)
+        .end_cell();
+}
+
+(int, int, int, cell) unpack_scheduled_change(cell scheduled_change) inline {
+    slice cs = scheduled_change.begin_parse();
+    int scheduled_after = cs~load_uint(64);
+    int new_numerator = cs~load_varuint32();
+    int new_denominator = cs~load_varuint32();
+    cell comment = cs~load_maybe_ref();
+    cs.end_parse();
+    return (scheduled_after, new_numerator, new_denominator, comment);
+}
+
+cell pack_scheduled_change(int scheduled_after, int new_numerator, int new_denominator, cell comment) inline {
+    return begin_cell()
+        .store_uint(scheduled_after, 64)
+        .store_varuint32(new_numerator)
+        .store_varuint32(new_denominator)
+        .store_maybe_ref(comment)
+        .end_cell();
 }
 
 () send_to_jetton_wallet(slice to_address, cell jetton_wallet_code, int ton_amount, cell master_msg, int need_state_init) impure inline {
@@ -55,6 +95,24 @@
     send_raw_message(msg.end_cell(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_BOUNCE_ON_ACTION_FAIL);
 }
 
+() emit_event(cell event) impure inline {
+    send_raw_message(begin_cell()
+        .store_uint(3, 2)
+        .store_uint(0, 2 + 2 + 64 + 32 + 1)
+        .store_uint(1, 1)
+        .store_ref(event)
+        .end_cell(), SEND_MODE_BOUNCE_ON_ACTION_FAIL);
+}
+
+() emit_display_multiplier_changed(int numerator, int denominator, cell comment) impure inline {
+    emit_event(begin_cell()
+        .store_uint(event::display_multiplier_changed, 32)
+        .store_varuint32(numerator)
+        .store_varuint32(denominator)
+        .store_maybe_ref(comment)
+        .end_cell());
+}
+
 () recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
     slice in_msg_full_slice = in_msg_full.begin_parse();
     int msg_flags = in_msg_full_slice~load_msg_flags();
@@ -67,8 +125,8 @@
         }
         in_msg_body~skip_query_id();
         int jetton_amount = in_msg_body~load_coins();
-        (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
-        save_data(total_supply - jetton_amount, admin_address, next_admin_address, jetton_wallet_code, metadata_uri);
+        (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
+        save_data(total_supply - jetton_amount, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, scaled_ui_data);
         return ();
     }
     slice sender_address = in_msg_full_slice~load_msg_addr();
@@ -77,7 +135,7 @@
 
     (int op, int query_id) = in_msg_body~load_op_and_query_id();
 
-    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
 
     if (op == op::mint) {
         throw_unless(error::not_owner, equal_slices_bits(sender_address, admin_address));
@@ -101,7 +159,7 @@
         check_amount_is_enough_to_transfer(ton_amount, forward_ton_amount, fwd_fee);
 
         send_to_jetton_wallet(to_address, jetton_wallet_code, ton_amount, master_msg, TRUE);
-        save_data(total_supply + jetton_amount, admin_address, next_admin_address, jetton_wallet_code, metadata_uri);
+        save_data(total_supply + jetton_amount, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, scaled_ui_data);
         return ();
     }
 
@@ -112,7 +170,7 @@
         throw_unless(error::not_valid_wallet,
             equal_slices_bits(calculate_user_jetton_wallet_address(from_address, my_address(), jetton_wallet_code), sender_address)
         );
-        save_data(total_supply - jetton_amount, admin_address, next_admin_address, jetton_wallet_code, metadata_uri);
+        save_data(total_supply - jetton_amount, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, scaled_ui_data);
         slice response_address = in_msg_body~load_msg_addr();
         in_msg_body.end_parse();
 
@@ -161,18 +219,75 @@
         return ();
     }
 
+    if (op == op::set_scaled_ui_data) {
+        throw_unless(error::not_owner, equal_slices_bits(sender_address, admin_address));
+        int new_numerator = in_msg_body~load_varuint32();
+        int new_denominator = in_msg_body~load_varuint32();
+        throw_unless(error::zero_multiplier, (new_numerator > 0) & (new_denominator > 0));
+        cell comment = in_msg_body~load_maybe_ref();
+        int preserve_scheduled_change? = in_msg_body~load_bool();
+        in_msg_body.end_parse();
+
+        (int numerator, int denominator, cell scheduled_change) = unpack_scaled_ui_data(scaled_ui_data);
+        ifnot preserve_scheduled_change? {
+            scheduled_change = null();
+        }
+
+        emit_display_multiplier_changed(new_numerator, new_denominator, comment);
+
+        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, pack_scaled_ui_data(new_numerator, new_denominator, scheduled_change));
+        return ();
+    }
+
+    if (op == op::schedule_scaled_ui_change) {
+        throw_unless(error::not_owner, equal_slices_bits(sender_address, admin_address));
+        int has_data = in_msg_body~load_bool();
+
+        ifnot has_data {
+            in_msg_body.end_parse();
+            (int numerator, int denominator, cell scheduled_change) = unpack_scaled_ui_data(scaled_ui_data);
+            save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, pack_scaled_ui_data(numerator, denominator, null()));
+            return ();
+        }
+
+        int scheduled_after = in_msg_body~load_uint(64);
+        int new_numerator = in_msg_body~load_varuint32();
+        int new_denominator = in_msg_body~load_varuint32();
+        throw_unless(error::zero_multiplier, (new_numerator > 0) & (new_denominator > 0));
+        cell comment = in_msg_body~load_maybe_ref();
+        in_msg_body.end_parse();
+
+        (int numerator, int denominator, cell scheduled_change) = unpack_scaled_ui_data(scaled_ui_data);
+        scheduled_change = pack_scheduled_change(scheduled_after, new_numerator, new_denominator, comment);
+
+        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, pack_scaled_ui_data(numerator, denominator, scheduled_change));
+        return ();
+    }
+
+    if (op == op::enact_scheduled_scaled_ui_change) {
+        in_msg_body.end_parse();
+        (int numerator, int denominator, cell scheduled_change) = unpack_scaled_ui_data(scaled_ui_data);
+        throw_if(error::no_scheduled_change, scheduled_change.null?());
+        (int scheduled_after, int new_numerator, int new_denominator, cell comment) = unpack_scheduled_change(scheduled_change);
+        throw_if(error::scheduled_change_not_ready, now() < scheduled_after);
+
+        emit_display_multiplier_changed(new_numerator, new_denominator, comment);
+        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, pack_scaled_ui_data(new_numerator, new_denominator, null()));
+        return ();
+    }
+
     if (op == op::change_admin) {
         throw_unless(error::not_owner, equal_slices_bits(sender_address, admin_address));
         next_admin_address = in_msg_body~load_msg_addr();
         in_msg_body.end_parse();
-        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, metadata_uri);
+        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, metadata_uri, scaled_ui_data);
         return ();
     }
 
     if (op == op::claim_admin) {
         in_msg_body.end_parse();
         throw_unless(error::not_owner, equal_slices_bits(sender_address, next_admin_address));
-        save_data(total_supply, next_admin_address, address_none(), jetton_wallet_code, metadata_uri);
+        save_data(total_supply, next_admin_address, address_none(), jetton_wallet_code, metadata_uri, scaled_ui_data);
         return ();
     }
 
@@ -220,7 +335,7 @@
 
     if (op == op::change_metadata_uri) {
         throw_unless(error::not_owner, equal_slices_bits(sender_address, admin_address));
-        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, begin_cell().store_slice(in_msg_body).end_cell());
+        save_data(total_supply, admin_address, next_admin_address, jetton_wallet_code, begin_cell().store_slice(in_msg_body).end_cell(), scaled_ui_data);
         return ();
     }
 
@@ -248,16 +363,31 @@ cell build_content_cell(slice metadata_uri) inline {
 }
 
 (int, int, slice, cell, cell) get_jetton_data() method_id {
-    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
     return (total_supply, TRUE, admin_address, build_content_cell(metadata_uri.begin_parse()), jetton_wallet_code);
 }
 
 slice get_wallet_address(slice owner_address) method_id {
-    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
     return calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code);
 }
 
 slice get_next_admin_address() method_id {
-    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
     return next_admin_address;
+}
+
+(int, int) get_display_multiplier() method_id {
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
+    (int numerator, int denominator, cell scheduled_change) = unpack_scaled_ui_data(scaled_ui_data);
+    return (numerator, denominator);
+}
+
+(int, int, int, cell) get_scheduled_change() method_id {
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri, cell scaled_ui_data) = load_data();
+    (int numerator, int denominator, cell scheduled_change) = unpack_scaled_ui_data(scaled_ui_data);
+    if scheduled_change.null?() {
+        return (null(), null(), null(), null());
+    }
+    return unpack_scheduled_change(scheduled_change);
 }

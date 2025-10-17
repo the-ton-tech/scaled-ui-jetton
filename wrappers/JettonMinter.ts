@@ -12,6 +12,19 @@ import {
 import {JettonWallet} from './JettonWallet';
 import {Op} from './JettonConstants';
 
+type ScheduledChange = {
+    scheduled_after: number,
+    new_numerator: bigint,
+    new_denominator: bigint,
+    comment: Cell | null,
+}
+
+type ScaledUiData = {
+    numerator: bigint,
+    denominator: bigint,
+    scheduled_change: ScheduledChange | null,
+}
+
 export type JettonMinterContent = {
     uri: string
 };
@@ -26,7 +39,8 @@ export type JettonMinterConfigFull = {
     //Makes no sense to update transfer admin. ...Or is it?
     transfer_admin: Address | null,
     wallet_code: Cell,
-    jetton_content: Cell | JettonMinterContent
+    jetton_content: Cell | JettonMinterContent,
+    scaled_ui_data: ScaledUiData,
 }
 
 export type LockType = 'unlock' | 'out' | 'in' | 'full';
@@ -69,6 +83,34 @@ export function endParse(slice: Slice) {
     }
 }
 
+function packScaledUiData(data: ScaledUiData): Cell {
+    return beginCell()
+        .storeVarUint(data.numerator, 5)
+        .storeVarUint(data.denominator, 5)
+        .storeMaybeRef(data.scheduled_change === null ? null : beginCell()
+            .storeUint(data.scheduled_change.scheduled_after, 64)
+            .storeVarUint(data.scheduled_change.new_numerator, 5)
+            .storeVarUint(data.scheduled_change.new_denominator, 5)
+            .storeMaybeRef(data.scheduled_change.comment)
+            .endCell())
+        .endCell();
+}
+
+function unpackScaledUiData(data: Cell): ScaledUiData {
+    const sc = data.beginParse();
+    const scheduledChange = sc.loadMaybeRef();
+    return {
+        numerator: sc.loadVarUintBig(5),
+        denominator: sc.loadVarUintBig(5),
+        scheduled_change: scheduledChange === null ? null : {
+            scheduled_after: sc.loadUint(64),
+            new_numerator: sc.loadVarUintBig(5),
+            new_denominator: sc.loadVarUintBig(5),
+            comment: sc.loadMaybeRef()
+        }
+    }
+}
+
 export function jettonMinterConfigCellToConfig(config: Cell): JettonMinterConfigFull {
     const sc = config.beginParse()
     const parsed: JettonMinterConfigFull = {
@@ -76,7 +118,8 @@ export function jettonMinterConfigCellToConfig(config: Cell): JettonMinterConfig
         admin: sc.loadAddress(),
         transfer_admin: sc.loadMaybeAddress(),
         wallet_code: sc.loadRef(),
-        jetton_content: sc.loadRef()
+        jetton_content: sc.loadRef(),
+        scaled_ui_data: unpackScaledUiData(sc.loadRef())
     };
     endParse(sc);
     return parsed;
@@ -94,6 +137,7 @@ export function jettonMinterConfigFullToCell(config: JettonMinterConfigFull): Ce
         .storeAddress(config.transfer_admin)
         .storeRef(config.wallet_code)
         .storeRef(content)
+        .storeRef(packScaledUiData(config.scaled_ui_data))
         .endCell()
 }
 
@@ -105,6 +149,7 @@ export function jettonMinterConfigToCell(config: JettonMinterConfig): Cell {
         .storeAddress(null) // Transfer admin address
         .storeRef(config.wallet_code)
         .storeRef(content)
+        .storeRef(packScaledUiData({ numerator: 1n, denominator: 1n, scheduled_change: null }))
         .endCell();
 }
 
@@ -501,6 +546,136 @@ export class JettonMinter implements Contract {
         });
     }
 
+    static setScaledUiDataMessage(numerator: bigint, denominator: bigint, comment?: string, preserve_scheduled_change: boolean = false, query_id: bigint | number = 0) {
+        return beginCell().storeUint(Op.set_scaled_ui_data, 32).storeUint(query_id, 64)
+            .storeVarUint(numerator, 5)
+            .storeVarUint(denominator, 5)
+            .storeMaybeRef(comment === undefined ? null : beginCell().storeStringTail(comment).endCell())
+            .storeBit(preserve_scheduled_change)
+            .endCell();
+    }
+
+    static parseSetScaledUiData(slice: Slice) {
+        const op = slice.loadUint(32);
+        if (op !== Op.set_scaled_ui_data) throw new Error('Invalid op');
+        const queryId = slice.loadUintBig(64);
+        const numerator = slice.loadVarIntBig(5);
+        const denominator = slice.loadVarIntBig(5);
+        const preserveScheduledChange = slice.loadBit();
+        const hasComment = slice.loadBit();
+        const comment = hasComment ? slice.loadStringTail() : undefined;
+        endParse(slice);
+        return {
+            queryId,
+            numerator,
+            denominator,
+            comment,
+            preserveScheduledChange
+        }
+    }
+
+    async sendSetScaledUiData(provider: ContractProvider, via: Sender, numerator: bigint, denominator: bigint, comment?: string, preserve_scheduled_change: boolean = false, value: bigint = toNano('0.1'), query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: JettonMinter.setScaledUiDataMessage(numerator, denominator, comment, preserve_scheduled_change, query_id),
+            value: value,
+        });
+    }
+
+    static scheduleScaledUiChangeMessage(data: {
+        scheduled_after: number,
+        numerator: bigint,
+        denominator: bigint,
+        comment?: string,
+    } | undefined, query_id: bigint | number = 0) {
+        if (data === undefined) {
+            return beginCell().storeUint(Op.schedule_scaled_ui_change, 32).storeUint(query_id, 64).storeBit(false).endCell();
+        }
+        return beginCell().storeUint(Op.schedule_scaled_ui_change, 32).storeUint(query_id, 64).storeBit(true)
+            .storeUint(data.scheduled_after, 64)
+            .storeVarUint(data.numerator, 5)
+            .storeVarUint(data.denominator, 5)
+            .storeMaybeRef(data.comment === undefined ? null : beginCell().storeStringTail(data.comment).endCell())
+            .endCell();
+    }
+
+    static parseScheduleScaledUiChange(slice: Slice): { queryId: bigint, data: { scheduledAfter: number, numerator: bigint, denominator: bigint, comment?: string } | undefined } {
+        const op = slice.loadUint(32);
+        if (op !== Op.schedule_scaled_ui_change) throw new Error('Invalid op');
+        const queryId = slice.loadUintBig(64);
+        const hasData = slice.loadBit();
+        if (!hasData) {
+            endParse(slice);
+            return {
+                queryId,
+                data: undefined
+            }
+        }
+        const scheduledAfter = slice.loadUint(64);
+        const numerator = slice.loadVarIntBig(5);
+        const denominator = slice.loadVarIntBig(5);
+        const hasComment = slice.loadBit();
+        const comment = hasComment ? slice.loadStringTail() : undefined;
+        endParse(slice);
+        return {
+            queryId,
+            data: {
+                scheduledAfter,
+                numerator,
+                denominator,
+                comment
+            }
+        }
+    }
+
+    async sendScheduleScaledUiChange(provider: ContractProvider, via: Sender, data: {
+        scheduled_after: number,
+        numerator: bigint,
+        denominator: bigint,
+        comment?: string,
+    } | undefined, value: bigint = toNano('0.1'), query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: JettonMinter.scheduleScaledUiChangeMessage(data, query_id),
+            value: value,
+        });
+    }
+
+    static enactScheduledScaledUiChangeMessage(query_id: bigint | number = 0) {
+        return beginCell().storeUint(Op.enact_scheduled_scaled_ui_change, 32).storeUint(query_id, 64).endCell();
+    }
+
+    static parseEnactScheduledScaledUiChange(slice: Slice) {
+        const op = slice.loadUint(32);
+        if (op !== Op.enact_scheduled_scaled_ui_change) throw new Error('Invalid op');
+        const queryId = slice.loadUintBig(64);
+        endParse(slice);
+        return { queryId };
+    }
+
+    async sendEnactScheduledScaledUiChange(provider: ContractProvider, via: Sender, value: bigint = toNano('0.1'), query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: JettonMinter.enactScheduledScaledUiChangeMessage(query_id),
+            value: value,
+        });
+    }
+
+    static parseDisplayMultiplierChanged(slice: Slice) {
+        const op = slice.loadUint(32);
+        if (op !== Op.display_multiplier_changed) throw new Error('Invalid op');
+        const numerator = slice.loadVarUintBig(5);
+        const denominator = slice.loadVarUintBig(5);
+        const hasComment = slice.loadBit();
+        const comment = hasComment ? slice.loadStringTail() : undefined;
+        endParse(slice);
+        return {
+            numerator,
+            denominator,
+            comment
+        }
+    }
+
     async getWalletAddress(provider: ContractProvider, owner: Address): Promise<Address> {
         const res = await provider.get('get_wallet_address', [{
             type: 'slice',
@@ -543,5 +718,23 @@ export class JettonMinter implements Contract {
     async getNextAdminAddress(provider: ContractProvider) {
         const res = await provider.get('get_next_admin_address', []);
         return res.stack.readAddressOpt();
+    }
+
+    async getDisplayMultiplier(provider: ContractProvider) {
+        const res = await provider.get('get_display_multiplier', []);
+        return {
+            numerator: res.stack.readBigNumber(),
+            denominator: res.stack.readBigNumber(),
+        }
+    }
+
+    async getScheduledChange(provider: ContractProvider) {
+        const res = await provider.get('get_scheduled_change', []);
+        return {
+            scheduledAfter: res.stack.readNumberOpt(),
+            numerator: res.stack.readBigNumberOpt(),
+            denominator: res.stack.readBigNumberOpt(),
+            comment: res.stack.readStringOpt(),
+        }
     }
 }
