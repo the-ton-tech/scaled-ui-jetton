@@ -138,6 +138,7 @@ export function jettonMinterConfigFullToCell(config: JettonMinterConfigFull): Ce
         .storeRef(config.wallet_code)
         .storeRef(content)
         .storeRef(packScaledUiData(config.scaled_ui_data))
+        .storeUint(0, 64)
         .endCell()
 }
 
@@ -149,7 +150,8 @@ export function jettonMinterConfigToCell(config: JettonMinterConfig): Cell {
         .storeAddress(null) // Transfer admin address
         .storeRef(config.wallet_code)
         .storeRef(content)
-        .storeRef(packScaledUiData({ numerator: 1n, denominator: 1n, scheduled_change: null }))
+        .storeRef(packScaledUiData({ numerator: 1000000000n, denominator: 1000000000n, scheduled_change: null }))
+        .storeUint(0, 64)
         .endCell();
 }
 
