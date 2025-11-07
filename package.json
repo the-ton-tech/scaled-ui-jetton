@@ -1,15 +1,17 @@
 {
-    "name": "ton-stable",
-    "description": "",
-    "version": "0.1.0",
+    "name": "test-debugger",
+    "version": "0.0.1",
     "scripts": {
-        "build": "npx blueprint build",
-        "test": "jest",
-        "deploy": "npx blueprint run",
-        "prettier": "npx prettier --write '{test,contracts,build}/**/*.{ts,js,json}'"
+        "bp": "blueprint",
+        "start": "blueprint run",
+        "build": "blueprint build",
+        "test": "jest --verbose",
+        "release": "blueprint pack && npm publish --access public"
+    },
+    "dependencies": {
+        "@ton/core": "~0"
     },
     "devDependencies": {
-        "dotenv": "^16.0.0",
         "@tact-lang/compiler": ">=1.6.13 <2.0.0",
         "@ton-community/func-js": ">=0.9.1",
         "@ton/blueprint": ">=0.36.0",
@@ -26,20 +28,5 @@
         "ts-node": "^10.9.2",
         "typescript": "^5.8.3"
     },
-    "dependencies": {
-        "@ton/core": "~0"
-    },
-    "prettier": {
-        "printWidth": 180
-    },
-    "mocha": {
-        "require": [
-            "chai",
-            "ts-node/register"
-        ],
-        "timeout": 20000
-    },
-    "engines": {
-        "node": ">=16.0.0"
-    }
+    "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

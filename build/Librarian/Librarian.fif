@@ -1,0 +1,181 @@
+"Asm.fif" include
+// automatically generated from `contracts/helpers/librarian.func` incl:`contracts/helpers/../stdlib.fc` 
+PROGRAM{
+  DECLPROC ~load_bool
+  DECLPROC store_bool
+  DECLPROC store_address_none
+  DECLPROC is_address_none
+  DECLPROC store_msg_flags_and_address_none
+  DECLPROC ~load_msg_flags
+  DECLPROC is_bounced
+  DECLPROC ~skip_bounced_prefix
+  DECLPROC store_statinit_ref_and_body_ref
+  DECLPROC store_only_body_ref
+  DECLPROC store_prefix_only_body
+  DECLPROC ~retrieve_fwd_fee
+  DECLPROC ~load_op
+  DECLPROC ~skip_op
+  DECLPROC store_op
+  DECLPROC ~load_query_id
+  DECLPROC ~skip_query_id
+  DECLPROC store_query_id
+  DECLPROC ~load_op_and_query_id
+  DECLPROC ~set_token_snake_metadata_entry
+  DECLPROC create_token_onchain_metadata
+  DECLPROC recv_internal
+  ~load_bool PROCINLINE:<{
+    1 LDI
+    SWAP
+  }>
+  store_bool PROCINLINE:<{
+    SWAP
+    1 STI
+  }>
+  store_address_none PROCINLINE:<{
+    0 PUSHINT
+    SWAP
+    2 STU
+  }>
+  is_address_none PROCINLINE:<{
+    2 PLDU
+    0 EQINT
+  }>
+  store_msg_flags_and_address_none PROCINLINE:<{
+    SWAP
+    6 STU
+  }>
+  ~load_msg_flags PROCINLINE:<{
+    4 LDU
+    SWAP
+  }>
+  is_bounced PROCINLINE:<{
+    1 PUSHINT
+    AND
+    1 EQINT
+  }>
+  ~skip_bounced_prefix PROCINLINE:<{
+    32 PUSHINT
+    SDSKIPFIRST
+  }>
+  store_statinit_ref_and_body_ref PROCINLINE:<{
+    7 PUSHINT
+    s0 s3 XCHG2
+    108 STU
+    STREF
+    STREF
+  }>
+  store_only_body_ref PROCINLINE:<{
+    1 PUSHINT
+    ROT
+    107 STU
+    STREF
+  }>
+  store_prefix_only_body PROCINLINE:<{
+    0 PUSHINT
+    SWAP
+    107 STU
+  }>
+  ~retrieve_fwd_fee PROCINLINE:<{
+    LDMSGADDR
+    NIP
+    LDVARUINT16
+    NIP
+    SKIPDICT
+    LDVARUINT16
+    NIP
+    LDVARUINT16
+    SWAP
+  }>
+  ~load_op PROCINLINE:<{
+    32 LDU
+    SWAP
+  }>
+  ~skip_op PROCINLINE:<{
+    32 PUSHINT
+    SDSKIPFIRST
+  }>
+  store_op PROCINLINE:<{
+    SWAP
+    32 STU
+  }>
+  ~load_query_id PROCINLINE:<{
+    64 LDU
+    SWAP
+  }>
+  ~skip_query_id PROCINLINE:<{
+    64 PUSHINT
+    SDSKIPFIRST
+  }>
+  store_query_id PROCINLINE:<{
+    SWAP
+    64 STU
+  }>
+  ~load_op_and_query_id PROCINLINE:<{
+    ~load_op INLINECALLDICT
+    SWAP
+    ~load_query_id INLINECALLDICT
+    s1 s2 XCHG
+  }>
+  ~set_token_snake_metadata_entry PROC:<{
+    0 PUSHINT
+    NEWC
+    8 STU
+    SWAP
+    STSLICER
+    ENDC
+    s0 s2 XCHG
+    8 PUSHPOW2
+    DICTUSETREF
+  }>
+  create_token_onchain_metadata PROCINLINE:<{
+    0 PUSHINT
+    NEWC
+    8 STU
+    STDICT
+    ENDC
+  }>
+  recv_internal PROC:<{
+    DROP
+    NIP
+    CTOS
+    4 LDU
+    NIP
+    LDMSGADDR
+    DROP
+    c4 PUSH
+    GASCONSUMED
+    OVER
+    11 PUSHPOW2
+    CDATASIZE
+    DROP
+    GASCONSUMED
+    s0 s3 XCHG2
+    SUB
+    -1 PUSHINT
+    GETGASFEESIMPLE
+    s0 s2 XCHG
+    3153600000 PUSHINT
+    -1 PUSHINT
+    GETSTORAGEFEE
+    ADD
+    16 PUSHINT
+    RAWRESERVE
+    NEWC
+    16 PUSHINT
+    store_msg_flags_and_address_none INLINECALLDICT
+    ROT
+    STSLICER
+    0 PUSHINT
+    STVARUINT16
+    store_prefix_only_body INLINECALLDICT
+    ENDC
+    7 PUSHPOW2
+    SENDRAWMSG
+    2 PUSHINT
+    SETLIBCODE
+    <b b> PUSHREF
+    SETCODE
+    <b b> PUSHREF
+    c4 POP
+  }>
+}END>c
