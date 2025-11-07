@@ -27,5 +27,5 @@ export async function run(provider: NetworkProvider) {
         },
         await compile('JettonMinter')));
 
-    await minter.sendSetScaledUiData(provider.sender(), 1n, 1n, "initialization", false, toNano('1.5'));
+    await minter.sendSetScaledUiData(provider.sender(), 10000n, 10000n, "initialization", false, toNano('0.1'));
 }
